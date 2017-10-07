@@ -39,22 +39,24 @@ server.post('/api/messages', connector.listen());
 var bot = new builder.UniversalBot(connector, [
     function (session) {
         session.routes = '';
-        session.send("Welcome to the route rain checker.");
-        session.beginDialog('ask-for-address', "Please type the origin address...");
+        session.send("Welcome to the Will It Rain? checker.");
+        builder.Prompts.text(session, "Please type the origin address...");
     },
-    function (session, results) {
-        session.userData.origin = results;
-        session.beginDialog('ask-for-address', "Please type the destination address...");
+    lookUpForAddress,
+    function (session, results) {        
+        session.userData.origin = session.userData.potentialAddresses[results.response.entity];
+        builder.Prompts.text(session, "Please type the destination address...");
     },
-    function (session, results) {
-        session.userData.destination = results;
+    lookUpForAddress,
+    function (session, results) {        
+        session.userData.destination = session.userData.potentialAddresses[results.response.entity];
+        console.log("UserData", session.userData)
+        console.log("Origin", session.userData.origin)
+        console.log("Destination", session.userData.destination)
+        console.log("Origin", session.userData.origin.entity)
+        console.log("Destination", session.userData.destination.entity)
         session.send("Selected options:\nOrigin: " + session.userData.origin.name +
             "\nDestination: " + session.userData.destination.name);
-
-            // TESTING
-            // session.userData.origin.name = "Barcelona, Espanya";
-            // session.userData.destination.name = "Madrid, Espanya";
-            // END TESTING
 
         var codeBadGroupsStarts = [2, 3, 5, 6, 7, 9];
 
@@ -68,42 +70,48 @@ var bot = new builder.UniversalBot(connector, [
         })
         .then(function (response) {
             //Recorremos tods las rutas
-            response.data.routes.forEach(function (route, indx) {
-                session.send('Runta número '+indx);
-                var lluviaEnLaRuta = [],
-                    promises = [];
-                route.legs.forEach(function (leg) { //Solo debería haber uno
-                    leg.steps.forEach(function (step) {
-                        /**
-                        * LLamada a weather
-                        */
-                        promises.push(axios.get(`${process.env.WEATHER_API_URL}/weather`, {
-                        params: {
-                                APPID: process.env.WEATHER_API_KEY,
-                                lat: step.start_location.lat,
-                                lon: step.start_location.lng
-                            }
-                    }));
-            });
-        });
-
-        axios.all(promises).then(function (results) {
-            results.forEach(function (response) {
-                var id = response.data.weather[0].id;
-                var test = !_.isEmpty(_.filter(codeBadGroupsStarts, function (code) {
-                    return _.startsWith(id, code);
-                }));
-
-                lluviaEnLaRuta.push(test);
-            });
-
-            session.send('Va ha llover: '+_.includes(lluviaEnLaRuta, true))
-        })
-            .catch(function (error) {
-                console.log(error);
-            });
-
-        });
+            if (response.data.routes.length > 0) {
+                response.data.routes.forEach(function (route, index) {
+                    session.send('Ruta número '+ index);
+                    var lluviaEnLaRuta = [],
+                        promises = [];
+                    route.legs.forEach(function (leg) { //Solo debería haber uno
+                        leg.steps.forEach(function (step) {
+                            /**
+                            * LLamada a weather
+                            */
+                            promises.push(axios.get(`${process.env.WEATHER_API_URL}/weather`, {
+                            params: {
+                                    APPID: process.env.WEATHER_API_KEY,
+                                    lat: step.start_location.lat,
+                                    lon: step.start_location.lng
+                                }
+                            }));
+                        });
+                    });
+    
+                    axios
+                    .all(promises)
+                    .then(function (results) {
+                        results.forEach(function (response) {
+                            var id = response.data.weather[0].id;
+                            var test = !_.isEmpty(_.filter(codeBadGroupsStarts, function (code) {
+                                return _.startsWith(id, code);
+                            }));
+    
+                            lluviaEnLaRuta.push(test);
+                        });
+    
+                        session.send('Va ha llover: '+_.includes(lluviaEnLaRuta, true))
+                    })
+                    .catch(function (error) {
+                        console.log(error);
+                    });
+                });
+            }
+            else {
+                session.send('There is not a route available');
+            }
         })
         .catch(function (error) {
             console.log(error);
@@ -111,32 +119,28 @@ var bot = new builder.UniversalBot(connector, [
     }
 ]);
 
-// Dialog to ask for a date and time
-bot.dialog('ask-for-address', [
-    function (session, results) {
-        builder.Prompts.text(session, results);
-    },
-    function (session, results) {
-        axios.get(`${process.env.GOOGLE_MAPS_API_URL}/geocode/json`, {
-            params: {
-                key: process.env.GoogleMapsGeocodeApi,
-                address: results.response,
-                language: 'ca'
-            }
-        })
-            .then((response) => {
-                session.userData.potentialAddresses = {};
-                response.data.results.forEach((p) => {
-                    session.userData.potentialAddresses[p.formatted_address] = {
-                        name: p.formatted_address,
-                        geometry: p.geometry
-                    };
-                });
-                builder.Prompts.choice(session, "Which one do you mean?", session.userData.potentialAddresses, { listStyle: builder.ListStyle.button });
-            });
-    },
-    function (session, results) {
-        console.log("Session addresses", session.userData.potentialAddresses);
-        session.endDialogWithResult(session.userData.potentialAddresses[results.response.entity]);
-    }
-]);
+function askForAddress (session, results) {
+    builder.Prompts.text(session, results);
+}
+function lookUpForAddress (session, results) {
+    axios.get(`${process.env.GOOGLE_MAPS_API_URL}/geocode/json`, {
+        params: {
+            key: process.env.GoogleMapsGeocodeApi,
+            address: results.response,
+            language: 'ca'
+        }
+    })
+    .then((response) => {
+        console.log("STEP: lookUpForAddress - then");
+        session.userData.potentialAddresses = {};
+        response.data.results.forEach((p) => {
+            session.userData.potentialAddresses[p.formatted_address] = {
+                name: p.formatted_address,
+                geometry: p.geometry
+            };
+        });
+        console.log("STEP: lookUpForAddress - before prompt choice");
+        builder.Prompts.choice(session, "Which one do you mean?", session.userData.potentialAddresses, { listStyle: builder.ListStyle.button });
+        console.log("STEP: lookUpForAddress - after prompt choice");
+    });
+}
