@@ -6,6 +6,7 @@ var restify = require('restify');
 var builder = require('botbuilder');
 var fs = require('fs');
 var axios = require('axios');
+var _ = require('lodash');
 
 var googleMapsApi = axios.create({
     baseURL: process.env.GOOGLE_MAPS_API_URL
@@ -47,8 +48,66 @@ var bot = new builder.UniversalBot(connector, [
     },
     function (session, results) {
         session.userData.destination = results;
-        session.send("Selected options:\nOrigin: " + session.userData.origin.name + 
-                     "\nDestination: " + session.userData.destination.name);
+        session.send("Selected options:\nOrigin: " + session.userData.origin.name +
+            "\nDestination: " + session.userData.destination.name);
+
+            // TESTING
+            // session.userData.origin.name = "Barcelona, Espanya";
+            // session.userData.destination.name = "Madrid, Espanya";
+            // END TESTING
+
+        var codeBadGroupsStarts = [2, 3, 5, 6, 7, 9];
+
+        axios.get(`${process.env.GOOGLE_MAPS_API_URL}/directions/json`, {
+            params: {
+                origin: session.userData.origin.name,
+                destination: session.userData.destination.name,
+                mode: 'driving',
+                key: process.env.GoogleMapsGeocodeApi
+            }
+        })
+        .then(function (response) {
+            //Recorremos tods las rutas
+            response.data.routes.forEach(function (route, indx) {
+                session.send('Runta número '+indx);
+                var lluviaEnLaRuta = [],
+                    promises = [];
+                route.legs.forEach(function (leg) { //Solo debería haber uno
+                    leg.steps.forEach(function (step) {
+                        /**
+                        * LLamada a weather
+                        */
+                        promises.push(axios.get(`${process.env.WEATHER_API_URL}/weather`, {
+                        params: {
+                                APPID: process.env.WEATHER_API_KEY,
+                                lat: step.start_location.lat,
+                                lon: step.start_location.lng
+                            }
+                    }));
+            });
+        });
+
+        axios.all(promises).then(function (results) {
+            results.forEach(function (response) {
+                var id = response.data.weather[0].id;
+                var test = !_.isEmpty(_.filter(codeBadGroupsStarts, function (code) {
+                    return _.startsWith(id, code);
+                }));
+
+                lluviaEnLaRuta.push(test);
+            });
+
+            session.send('Va ha llover: '+_.includes(lluviaEnLaRuta, true))
+        })
+            .catch(function (error) {
+                console.log(error);
+            });
+
+        });
+        })
+        .catch(function (error) {
+            console.log(error);
+        });
     }
 ]);
 
@@ -65,16 +124,16 @@ bot.dialog('ask-for-address', [
                 language: 'ca'
             }
         })
-        .then((response) => {
-            session.userData.potentialAddresses = {};
-            response.data.results.forEach(function(p) {
-                session.userData.potentialAddresses[p.formatted_address] = {
-                    name: p.formatted_address,
-                    geometry: p.geometry
-                };
-            }, this);
-            builder.Prompts.choice(session, "Which one do you mean?", session.userData.potentialAddresses, { listStyle: builder.ListStyle.button });
-        });
+            .then((response) => {
+                session.userData.potentialAddresses = {};
+                response.data.results.forEach(function (p) {
+                    session.userData.potentialAddresses[p.formatted_address] = {
+                        name: p.formatted_address,
+                        geometry: p.geometry
+                    };
+                }, this);
+                builder.Prompts.choice(session, "Which one do you mean?", session.userData.potentialAddresses, { listStyle: builder.ListStyle.button });
+            });
     },
     function (session, results) {
         console.log("Session addresses", session.userData.potentialAddresses);
