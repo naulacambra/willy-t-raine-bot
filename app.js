@@ -4,8 +4,12 @@ A simple echo bot for the Microsoft Bot Framework.
 
 var restify = require('restify');
 var builder = require('botbuilder');
-var dotenv = require('dotenv');
-dotenv.config();
+var fs = require('fs');
+
+if (fs.existsSync('.env')) {
+    var dotenv = require('dotenv');
+    dotenv.config();
+}
 
 // Setup Restify Server
 var server = restify.createServer();
