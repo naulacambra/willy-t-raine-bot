@@ -9,6 +9,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "axios": "^0.16.2",
     "botbuilder": "^3.8.4",
     "restify": "^5.0.0"
   },

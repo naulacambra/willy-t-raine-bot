@@ -5,6 +5,7 @@ A simple echo bot for the Microsoft Bot Framework.
 var restify = require('restify');
 var builder = require('botbuilder');
 var fs = require('fs');
+var axios = require('axios');
 
 if (fs.existsSync('.env')) {
     var dotenv = require('dotenv');
@@ -39,11 +40,25 @@ var bot = new builder.UniversalBot(connector);
 
 bot.dialog('/', [
     function (session) {
-        builder.Prompts.text(session, "Hello... What's your name? Motherfucker!");
+        builder.Prompts.text(session, "Hello... Where are you? Motherfucker!"); 
     },
     function (session, results) {
+        axios.get(`https://maps.googleapis.com/maps/api/geocode/json?key=${process.env.GoogleMapsGeocodeApi}&address=${results.response}&outputFormat=json&language=ca`)
+        .then((response) => {
+            var possible_addresses = response.data.results.reduce((sum, result) => {
+                return Object.assign({}, sum, {
+                    [result.formatted_address]: {
+                        name: result.formatted_address,
+                        geometry: result.geometry,
+                    }
+                });
+            }, {});
+            console.log('debugging', response.data);
+            builder.Prompts.choice(session, "Which one do you mean?", possible_addresses, { listStyle: builder.ListStyle.button }); 
+            //builder.Prompts.number(session, "Hi " + results.response + ", you are at " + response.data.results[0].formatted_address + "?"); 
+        })
         session.userData.name = results.response;
-        builder.Prompts.number(session, "Hi " + results.response + ", How many years have you been coding?"); 
+        
     },
     function (session, results) {
         session.userData.coding = results.response;
