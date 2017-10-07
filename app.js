@@ -7,6 +7,10 @@ var builder = require('botbuilder');
 var fs = require('fs');
 var axios = require('axios');
 
+var googleMapsApi = axios.create({
+    baseURL: process.env.GOOGLE_MAPS_API_URL
+});
+
 if (fs.existsSync('.env')) {
     var dotenv = require('dotenv');
     dotenv.config();
@@ -38,10 +42,12 @@ server.post('/api/messages', connector.listen());
 // Create your bot with a function to receive messages from the user
 var bot = new builder.UniversalBot(connector, [
     function (session) {
-        session.send("Welcome to the dinner to hell reservation.");
-        session.beginDialog('askForDateTime');
+        session.routes = '';
+        session.send("Welcome to the route rain checker.");
+        session.beginDialog('ask-for-origin');
     },
     function (session, results) {
+        console.debug("Origin", results.response)
         session.dialogData.reservationDate = builder.EntityRecognizer.resolveTime([results.response]);
         session.beginDialog('askForPartySize');
     },
@@ -59,9 +65,30 @@ var bot = new builder.UniversalBot(connector, [
 ]);
 
 // Dialog to ask for a date and time
-bot.dialog('askForDateTime', [
+bot.dialog('ask-for-origin', [
     function (session) {
-        builder.Prompts.time(session, "Please provide a reservation date and time (e.g.: June 6th at 5pm)");
+        builder.Prompts.text(session, "Please the origin address...");
+    },
+    function (session, results) {
+        axios.get(`${process.env.GOOGLE_MAPS_API_URL}/geocode/json`, {
+            params: { 
+                key: process.env.GoogleMapsGeocodeApi,
+                address: results.response,
+                language: 'ca'
+            }
+        })
+         .then((response) => {
+             var possible_addresses = response.data.results.reduce((sum, result) => {
+                 return Object.assign({}, sum, {
+                     [result.formatted_address]: {
+                         name: result.formatted_address,
+                         geometry: result.geometry,
+                     }
+                 });
+             }, {});
+             console.log('debugging', response.data);
+             builder.Prompts.choice(session, "Which one do you mean?", possible_addresses, { listStyle: builder.ListStyle.button }); 
+         });
     },
     function (session, results) {
         session.endDialogWithResult(results);
