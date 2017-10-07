@@ -36,38 +36,54 @@ server.post('/api/messages', connector.listen());
 * ---------------------------------------------------------------------------------------- */
 
 // Create your bot with a function to receive messages from the user
-var bot = new builder.UniversalBot(connector);
-
-bot.dialog('/', [
+var bot = new builder.UniversalBot(connector, [
     function (session) {
-        builder.Prompts.text(session, "Hello... Where are you? Motherfucker!"); 
+        session.send("Welcome to the dinner to hell reservation.");
+        session.beginDialog('askForDateTime');
     },
     function (session, results) {
-        axios.get(`https://maps.googleapis.com/maps/api/geocode/json?key=${process.env.GoogleMapsGeocodeApi}&address=${results.response}&outputFormat=json&language=ca`)
-        .then((response) => {
-            var possible_addresses = response.data.results.reduce((sum, result) => {
-                return Object.assign({}, sum, {
-                    [result.formatted_address]: {
-                        name: result.formatted_address,
-                        geometry: result.geometry,
-                    }
-                });
-            }, {});
-            console.log('debugging', response.data);
-            builder.Prompts.choice(session, "Which one do you mean?", possible_addresses, { listStyle: builder.ListStyle.button }); 
-            //builder.Prompts.number(session, "Hi " + results.response + ", you are at " + response.data.results[0].formatted_address + "?"); 
-        })
-        session.userData.name = results.response;
-        
+        session.dialogData.reservationDate = builder.EntityRecognizer.resolveTime([results.response]);
+        session.beginDialog('askForPartySize');
     },
     function (session, results) {
-        session.userData.coding = results.response;
-        builder.Prompts.choice(session, "What language do you code Node using?", ["JavaScript", "CoffeeScript", "TypeScript"]);
+        session.dialogData.partySize = results.response;
+        session.beginDialog('askForReserverName');
     },
     function (session, results) {
-        session.userData.language = results.response.entity;
-        session.send("Got it... " + session.userData.name + 
-                    " you've been programming for " + session.userData.coding + 
-                    " years and use " + session.userData.language + ".");
+        session.dialogData.reservationName = results.response;
+
+        // Process request and display reservation details
+        session.send(`Reservation confirmed. Reservation details: <br/>Date/Time: ${session.dialogData.reservationDate} <br/>Party size: ${session.dialogData.partySize} <br/>Reservation name: ${session.dialogData.reservationName}`);
+        session.endDialog();
+    }
+]);
+
+// Dialog to ask for a date and time
+bot.dialog('askForDateTime', [
+    function (session) {
+        builder.Prompts.time(session, "Please provide a reservation date and time (e.g.: June 6th at 5pm)");
+    },
+    function (session, results) {
+        session.endDialogWithResult(results);
+    }
+]);
+
+// Dialog to ask for number of people in the party
+bot.dialog('askForPartySize', [
+    function (session) {
+        builder.Prompts.text(session, "How many people are in your party?");
+    },
+    function (session, results) {
+        session.endDialogWithResult(results);
+    }
+])
+
+// Dialog to ask for the reservation name.
+bot.dialog('askForReserverName', [
+    function (session) {
+        builder.Prompts.text(session, "Who's name will this reservation be under?");
+    },
+    function (session, results) {
+        session.endDialogWithResult(results);
     }
 ]);
