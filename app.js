@@ -126,12 +126,12 @@ bot.dialog('ask-for-address', [
         })
             .then((response) => {
                 session.userData.potentialAddresses = {};
-                response.data.results.forEach(function (p) {
+                response.data.results.forEach((p) => {
                     session.userData.potentialAddresses[p.formatted_address] = {
                         name: p.formatted_address,
                         geometry: p.geometry
                     };
-                }, this);
+                });
                 builder.Prompts.choice(session, "Which one do you mean?", session.userData.potentialAddresses, { listStyle: builder.ListStyle.button });
             });
     },
